@@ -1,0 +1,37 @@
+install openvpn-update-resolv-conf
+
+for every openvpn .conf file add the following snippet to resolve dns
+--
+script-security 2
+up /etc/openvpn/update-resolv-conf
+down /etc/openvpn/update-resolv-conf
+--
+i3blocks config
+--
+# OpenVPN support
+#
+# Support multiple VPN, with colors.
+#
+# To make this work
+# -----------------
+#
+# in unit file fully qualify config name and write pid file
+# edit the openvpn unit file snippet to create a dropin
+#
+# sudo systemctl edit openvpn-client@<.conf> (without .conf)
+#
+# -- begin
+# [Service]
+# ExecStartPre=-/usr/bin/mkdir /run/openvpn
+# ExecStart=
+# ExecStart=/usr/sbin/openvpn --suppress-timestamps --nobind --config /etc/openvpn/client/%i.conf --writepid /run/openvpn/%i.pid
+# -- end
+#
+# Fully qualify device name in .conf file
+#
+# See rest setup below
+#
+[openvpn]
+label=
+command=/usr/lib/i3blocks/openvpn | cut -d ' ' -f2-
+interval=20
