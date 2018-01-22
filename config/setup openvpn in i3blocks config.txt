@@ -1,3 +1,6 @@
+#--
+#  Instructions for Arch-based systems
+#--
 install openvpn-update-resolv-conf
 
 for every openvpn .conf file add the following snippet to resolve dns
