@@ -17,7 +17,7 @@
 #                       # of files
 #
 #============================================
-#/bin/bash
+#!/bin/bash
 awk 'BEGIN { FS = "\t"; OFS = FS }
  	{ n=split($3, ss, "."); if (n > 1) { ext = tolower(ss[n]); e[ext]++; s[ext]+=$4 } }
 	END { for (x in e) { print x, s[x], e[x] } }'
