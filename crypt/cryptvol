@@ -1,0 +1,201 @@
+#!/bin/bash
+#
+# cryptvol open [cryptvol] [mountpoint]
+# -- open a luks of tcrypt [cryptvol] and mount on [mountpoint]
+#
+# cryptvol close [cryptvol]
+# -- close [cryptvol] after unmount
+# 
+# cryptvol status [cryptvol]
+# -- get status of [cryptvol]
+#
+# Dependencies: cryptsetup, sudo
+#
+parameters="$#"
+command="$0"
+operation="$1"
+cryptvol="$2"
+mountpoint="$3"
+crypttype=""
+passphrase=""
+open_cryptvol=""
+open_mountpoint=""
+open_crypttype=""
+#
+print_usage(){
+  printf "%s\n" "
+  Syntax:
+    "$command" status [cryptvol]
+    "$command" open [cryptvol] [mountpoint]
+    "$command" close [cryptvol]
+    "
+}
+#
+check_parameters()
+{
+	if [ "$1" -ne "$2" ]
+	then
+		print_usage
+		exit 1
+	fi
+}
+#
+check_syntax()
+{
+	case "$operation" in
+	open)
+		check_parameters "$parameters" 3
+		check_cryptvol
+		check_mountpoint
+		;;
+	close)
+		check_parameters "$parameters" 2
+		check_cryptvol
+		;;
+	status)
+		check_parameters "$parameters" 2
+		check_cryptvol
+		;;
+	*)
+		print_usage
+	esac
+}
+#
+get_password(){
+	echo "Please enter your passphrase"
+	read -s passphrase
+	if [ -z "$passphrase" ]
+	then
+		echo error: no passphrase entered, exiting
+		exit 1
+	fi
+}
+#
+get_open_stats(){
+	open_cryptvol=$(lsblk -lpn | \
+		grep /dev/mapper/$(basename "$cryptvol") | awk '{print $1}')
+	if [ ! -z "$open_cryptvol" ]
+	then
+		open_mountpoint=$(lsblk -lpn | \
+			grep "$open_cryptvol" | awk '{print $7}')
+	fi
+}
+#
+check_cryptvol(){
+	if [ -e "$cryptvol" ]
+	then
+		cryptvol=$(realpath "$cryptvol")
+	else
+		echo error: volume "$cryptvol" does not exist
+		exit 1
+	fi
+}
+#
+check_mountpoint(){
+	if [ -d "$mountpoint" ]
+	then
+		mountpoint=$(realpath "$mountpoint")
+	else
+		echo error: mountpoint "$mountpoint" does not exist
+		exit 1
+	fi
+}	
+#
+check_crypttype(){
+	result=$(echo "$passphrase" | \
+		cryptsetup tcryptDump "$cryptvol" | grep -i cipher | wc -l)
+	if [ "$result" -gt 0 ]
+	then
+		crypttype=tcrypt
+	else
+		result=$(echo "$passphrase" | \
+			cryptsetup luksDump "$cryptvol" | grep -i cipher | wc -l)
+		if [ "$result" -gt 0 ]
+		then
+			crypttype=luks
+		else
+			echo error: crypttype unknown, exiting
+			exit 1
+		fi
+	fi
+}
+#
+get_open_crypttype(){
+	result=$(sudo cryptsetup status "$open_cryptvol" | \
+		grep type.*TCRYPT | wc -l)
+	if [ "$result" -gt 0 ]
+	then
+		open_crypttype=tcrypt
+	else
+		result=$(sudo cryptsetup status "$open_cryptvol" | \
+			grep type.*LUKS | wc -l)
+		if [ "$result" -gt 0 ]
+		then
+			open_crypttype=luks
+		else
+			echo error: crypttype unknown, exiting
+			exit 1
+		fi
+	fi
+}
+#
+do_operation(){
+	case "$operation" in
+	open)
+		get_open_stats
+		if [ -z "$open_cryptvol" ]
+		then
+			get_password
+			check_crypttype
+			echo "$passphrase" | sudo cryptsetup "$crypttype"Open \
+				"$cryptvol" $(basename "$cryptvol") && \
+				sudo mount /dev/mapper/$(basename "$cryptvol") \
+				"$mountpoint" -o gid=$(id -g),uid=$(id -u)
+		else
+			echo info: "$cryptvol" already open as "$open_cryptvol"
+			if [ -z "$open_mountpoint" ]
+			then
+				sudo mount /dev/mapper/$(basename "$cryptvol") \
+					"$mountpoint" -o gid=$(id -g),uid=$(id -u)
+			else
+				echo info: "$open_cryptvol" \
+					already mounted on "$open_mountpoint"
+			fi
+		fi
+		;;
+	close)
+		get_open_stats
+		if [ ! -z "$open_mountpoint" ]
+		then
+			sudo umount "$open_mountpoint"
+		else
+			echo info: "$cryptvol" not mounted
+		fi 
+		if [ ! -z "$open_cryptvol" ]
+		then
+			get_open_crypttype
+			sudo cryptsetup "$open_crypttype"Close "$open_cryptvol"
+		else
+			echo info: "$cryptvol" not open
+		fi
+		;;
+	status)
+		get_open_stats
+		if [ ! -z "$open_cryptvol" ]
+		then
+			sudo cryptsetup status "$open_cryptvol"
+		fi
+		if [ -z "$open_mountpoint" ]
+		then
+			echo info: not mounted
+		else
+			echo info: mounted on "$open_mountpoint"
+		fi
+		;;
+	*)
+		echo error: no operation "$operation"
+	esac
+}
+#
+check_syntax
+do_operation
