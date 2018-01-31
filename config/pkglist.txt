@@ -1,0 +1,6 @@
+###
+# Package list
+###
+0 community/dina-font 2.92-6 [installed]
+      A monospace bitmap font, primarily aimed at programmers
+
